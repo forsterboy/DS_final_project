@@ -1,0 +1,7 @@
+jupyterlab==3.2.7
+jupyterlab-dash==0.1.0a3
+matplotlib==3.5.1
+numpy==1.24.3
+pandas==2.0.1
+seaborn==0.11.2
+pingouin==0.5.4
