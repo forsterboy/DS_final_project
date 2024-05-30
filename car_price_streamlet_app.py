@@ -1,12 +1,14 @@
 import pandas as pd
 import streamlit as st
-import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
+import plotly.figure_factory as ff
 import os
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import BaggingRegressor, ExtraTreesRegressor, RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
@@ -34,11 +36,26 @@ Y = cars_df['selling_price']
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, random_state=101)
 
 columns = ['brand', 'model', 'seller_type', 'transmission', 'fuel', 'owner', 'model_variants']
-models = {'XGB': 'Extra gradient boosting', 'RFR': 'Random forest regression', 'Bagging': 'BaggingRegressor', 'ETR': 'ExtraTreesRegressor'}
+models = {'LR': 'LinearRegressor', 'XGB': 'Extra gradient boosting', 'RFR': 'Random forest regression', 'Bagging': 'BaggingRegressor', 'ETR': 'ExtraTreesRegressor'}
 
+st.set_page_config(layout="wide", page_title="Car Price Prediction")
 
 @st.cache_resource
-def getXGBModel():
+def getLRModel(testPredictions, modelsPredictMetrics):
+    # Loading the Linear Regression model
+    lRegModel = LinearRegression()
+    lRegModel.fit(X_train, Y_train)
+    lrPredicts = lRegModel.predict(X_test)
+    lrScore = r2_score(Y_test, lrPredicts)
+    lrError = np.sqrt(mean_squared_error(Y_test, lrPredicts))
+    print('R2-Score LR ', lrScore)
+    print('Error square LR ', lrError)
+    modelsPredictMetrics.append(['Linear Regression', lrScore, lrError])
+    testPredictions[models['LR']] = lrPredicts
+    return lRegModel
+
+@st.cache_resource
+def getXGBModel(testPredictions, modelsPredictMetrics):
     # Create a XGB model and train created model.
     xgb = XGBRegressor()
     xgb.fit(X_train, Y_train)
@@ -47,10 +64,12 @@ def getXGBModel():
     xgbError = np.sqrt(mean_squared_error(Y_test, xgbPredicts))
     print('R2-Score XGB ', xgbScore)
     print('Error square XGB ', xgbError)
-    return xgb, xgbPredicts
+    modelsPredictMetrics.append(['Extra gradient boosting', xgbScore, xgbError])
+    testPredictions[models['XGB']] = xgbPredicts
+    return xgb
 
 @st.cache_resource
-def getRFRModel():
+def getRFRModel(testPredictions, modelsPredictMetrics):
     rfr = RandomForestRegressor()
     rfr.fit(X_train, Y_train)
     rfrPredicts = rfr.predict(X_test)
@@ -58,10 +77,12 @@ def getRFRModel():
     rfrError = np.sqrt(mean_squared_error(Y_test, rfrPredicts))
     print('R2-Score RFR ', rfrScore)
     print('Error square RFR ', rfrError)
-    return rfr, rfrPredicts
+    modelsPredictMetrics.append(['Random forest regression', rfrScore, rfrError])
+    testPredictions[models['RFR']] = rfrPredicts
+    return rfr
 
 @st.cache_resource
-def getBaggingModel():
+def getBaggingModel(testPredictions, modelsPredictMetrics):
     bagging = BaggingRegressor()
     bagging.fit(X_train, Y_train)
     baggingPredicts = bagging.predict(X_test)
@@ -69,9 +90,12 @@ def getBaggingModel():
     baggingError = np.sqrt(mean_squared_error(Y_test, baggingPredicts))
     print('R2-Score Bagging ', baggingScore)
     print('Error square Bagging ', baggingError)
-    return bagging, baggingPredicts
+    modelsPredictMetrics.append(['BaggingRegressor', baggingScore, baggingError])
+    testPredictions[models['Bagging']] = baggingPredicts
+    return bagging
 
-def getETRModel():
+@st.cache_resource
+def getETRModel(testPredictions, modelsPredictMetrics):
     etr = ExtraTreesRegressor()
     etr.fit(X_train, Y_train)
     etrPredicts = etr.predict(X_test)
@@ -79,7 +103,23 @@ def getETRModel():
     etrError = np.sqrt(mean_squared_error(Y_test, etrPredicts))
     print('R2-Score ExtraTreesRegressor ', etrScore)
     print('Error square ExtraTreesRegressor ', etrError)
-    return etr, etrPredicts
+    modelsPredictMetrics.append(['ExtraTreesRegressor', etrScore, etrError])
+    testPredictions[models['ETR']] = etrPredicts
+    return etr
+
+def initModels():
+    print('Inits models')
+    testPredictions = dict()
+    modelsPredictMetrics = list()
+    getLRModel(testPredictions, modelsPredictMetrics)
+    getRFRModel(testPredictions, modelsPredictMetrics)
+    getXGBModel(testPredictions, modelsPredictMetrics)
+    getBaggingModel(testPredictions, modelsPredictMetrics)
+    getETRModel(testPredictions, modelsPredictMetrics)
+    if 'testPredictions' not in st.session_state:
+        st.session_state['testPredictions'] = testPredictions
+    if 'modelsPredictMetrics' not in st.session_state:
+        st.session_state['modelsPredictMetrics'] = modelsPredictMetrics
 
 def plotForTab(tab, headn:str, x, y):
     arr = np.random.normal(1, 1, size=100)
@@ -97,27 +137,6 @@ def plotForTab(tab, headn:str, x, y):
     tab.pyplot(fig) 
     os.remove('x.png') 
 
-
-def plotForTabTest(tab, headn:str, x, y):
-    imgs = [np.random.random((50,50)) for _ in range(4)]
-    fig1 = plt.figure(figsize = (3,3))
-    plt.subplot(2, 2, 1)
-    plt.imshow(imgs[0])
-    plt.axis('off')
-    plt.subplot(2, 2, 2)
-    plt.imshow(imgs[1])
-    plt.axis('off')
-    plt.subplot(2, 2, 3)
-    plt.imshow(imgs[2])
-    plt.axis('off')
-    plt.subplot(2, 2, 4)
-    plt.imshow(imgs[3])
-    plt.axis('off')
-    plt.subplots_adjust(wspace=.025, hspace=.025)
-    plt.savefig('x',dpi=400)
-    tab.image('x.png')
-    tab.pyplot(fig1)
-    os.remove('x.png')
 
 def plotForTabParam(tab, input_year):
     title = 'based on highest selling'
@@ -139,6 +158,7 @@ def plotForTabParam(tab, input_year):
     fig.suptitle('Data of year ' + str(input_year))
     tab.pyplot(fig)
 
+# Builds different plots to top 10 brands (fuel, transmission, seller, )
 def plotForTabParamYearSP(tab, input_year):
     tab.subheader('Top 10 Brands of year ' + str(input_year))
     tab.write('based on highest selling')
@@ -147,12 +167,17 @@ def plotForTabParamYearSP(tab, input_year):
     tab.line_chart(orig_cars_df.query('year == @input_year').groupby("brand")['selling_price'].mean().nlargest(10))
     #tab.scatter_chart(orig_cars_df.query('year == @input_year').groupby("brand").size().nlargest(10))
 
+# Builds different plots to another features (fuel, transmission, seller, )
 def plotForTabParamYearAF(tab, input_year):
     tab.subheader('Top 10 Brands of year ' + str(input_year))
     tab.write('based on fuel type')
     tab.bar_chart(orig_cars_df.query('year == @input_year').groupby("fuel").size())
     tab.write('based on transmission type')
     tab.line_chart(orig_cars_df.query('year == @input_year').groupby("transmission").size())
+    tab.write('based on seller type')
+    tab.bar_chart(orig_cars_df.query('year == @input_year').groupby("seller_type").size())
+    tab.write('based on owner type')
+    tab.bar_chart(orig_cars_df.query('year == @input_year').groupby("owner").size())
 
 def printPredictInputData(brand, model, model_variant, year, km_driven, engine_size, mileage, max_power, fuel, seller, transmission, owner, seats, pred_model):
     print('Passed data year ', year) 
@@ -185,30 +210,25 @@ def predict_carprice(brand, model, model_variant, year, km_driven, engine_size, 
                                          'km_driven_bin','engine_bin','mileage_bin','max_power_bin'])
     
     predictionResult = dict()
-    testPredictions = dict()
     for curModel in models:
         if curModel == 'XGB':
-            predictModel, testPredicts = getXGBModel() 
+            predictModel = getXGBModel(st.session_state['testPredictions'], st.session_state['modelsPredictMetrics']) 
             prediction = predictModel.predict(input_data)
             predictionResult[models[curModel]] = prediction[0]
-            testPredictions[models[curModel]] = testPredicts
         elif curModel == 'RFR':
-            predictModel, testPredicts = getRFRModel()
+            predictModel = getRFRModel(st.session_state['testPredictions'], st.session_state['modelsPredictMetrics'])
             prediction = predictModel.predict(input_data)
             predictionResult[models[curModel]] = prediction[0]
-            testPredictions[models[curModel]] = testPredicts
         elif curModel == 'Bagging':
-            predictModel, testPredicts = getBaggingModel()
+            predictModel = getBaggingModel(st.session_state['testPredictions'], st.session_state['modelsPredictMetrics'])
             prediction = predictModel.predict(input_data)
             predictionResult[models[curModel]] = prediction[0]
-            testPredictions[models[curModel]] = testPredicts
         else:
-            predictModel, testPredicts = getETRModel()
+            predictModel = getETRModel(st.session_state['testPredictions'], st.session_state['modelsPredictMetrics'])
             prediction = predictModel.predict(input_data)
             predictionResult[models[curModel]] = prediction[0]
-            testPredictions[models[curModel]] = testPredicts
 
-    return predictionResult, testPredictions
+    return predictionResult
 
 def printDataForPrediction(tab, brand, model, model_var, year):
     tab.subheader('Data based on dataset:')
@@ -241,26 +261,95 @@ def printDataForPrediction(tab, brand, model, model_var, year):
     #pd.options.display.float_format = '${:,.2f}'.format
     data['year'] = data['year'].map(str)
     tab.write(data)  
-    tab.subheader('Used Cars Price Prediction by 4 models')
+    tab.subheader('Used Cars Price Prediction')
     #tab.write('Models comparison, visualization the relationship between the actual car prices and the prices predicted by our models, providing insights into their accuracy and generalization ability.')
     # TODO
     tab.write('Prediction data to be displayed...')
 
-def refreshModels(tab, testPredictions):
+def lineGraph_prediction(n, y_actual, y_predicted):
+    y = y_actual
+    y_total = y_predicted
+    number = n
+    aa=[x for x in range(number)]
+    fig = plt.figure(figsize=(25,10)) 
+    plt.plot(aa, y[:number], marker='.', label="actual")
+    plt.plot(aa, y_total[:number], 'b', label="prediction")
+    plt.xlabel('Price prediction of first {} used cars'.format(number), size=15)
+    plt.legend(fontsize=15)
+    #plt.show()
+
+def plotline_prediction(tab, n, y_actual, y_predicted):
+    #y = y_actual
+    #y_total = y_predicted
+    number = n
+    #aa=[x for x in range(number)] 
+    data = [Y_test.values[:number], y_predicted[:number]]
+    #group_labels = ['actual', 'prediction']
+    tab.plotly_chart(px.line(data), use_container_width=True)
+
+def refreshModels(tab):
+    testPredictions = st.session_state['testPredictions']
+    modelsPredictMetrics = st.session_state['modelsPredictMetrics']
+    
+    tab.subheader('Prediction accuracy for models by R2 / MSE criterions')
+    pd.options.display.float_format = '${:,.2f}'.format
+
+    prediction_metrics_df = pd.DataFrame(modelsPredictMetrics, columns=(['Model', 'r2 Score', 'MSE']))
+    #tab.dataframe(prediction_df.style.highlight_max(axis=0))
+    sorted_metrics_df = prediction_metrics_df.sort_values(by='r2 Score', ascending=False)
+    tab.dataframe(sorted_metrics_df, hide_index=True, width=1200)
+    #my_table = tab.table(prediction_df.sort_values(by='r2 Score', ascending=False))
+
     modelsKeys = testPredictions.keys()
     print(modelsKeys)
-    fig, axs = plt.subplots(2, 2, figsize=(12, 8), sharey=True)
-    axs_list = [axs[0, 0], axs[0, 1], axs[1, 0], axs[1, 1]]
+    fig, axs = plt.subplots(3, 2, figsize=(12, 8), sharey=True)
+    axs_list = [axs[0, 0], axs[0, 1], axs[1, 0], axs[1, 1], axs[2, 0]]
     ind = 0
-    for key in testPredictions.keys():
-        axs_list[ind].set_title("by " + key)
-        axs_list[ind].scatter(Y_test, testPredictions[key])
-        ind = ind + 1
-    fig.suptitle('Actual prices vs. predicted prices')
-    tab.pyplot(fig)
-    tab.write('Prediction accuracy for models by R2 criterion - r2_test')
-    prediction_df = pd.DataFrame(np.random.randn(10, 6), columns=(['r2_train', 'r2_test', 'd_train', 'd_test', 'rmse_train','rmse_test']))
-    my_table = tab.table(prediction_df)
+    
+    #for key in testPredictions.keys():
+    #    axs_list[ind].set_title("by " + key)
+    #    axs_list[ind].set_xlabel("Actual price")
+    #   axs_list[ind].set_ylabel("Predicted price")
+    #    axs_list[ind].scatter(Y_test, Y_test, color='blue', label='Actual Selling Price')
+    #    axs_list[ind].scatter(Y_test, testPredictions[key], color='green',label='Predicted Selling Price')
+    #   ind = ind + 1
+
+    tab.subheader(':blue[Actual prices] vs. :green[predicted prices]')
+    line_selected = tab.checkbox("Use line charts)")
+    if not line_selected:
+        for key in testPredictions.keys():
+            axs_list[ind].set_title("by " + key)
+            axs_list[ind].set_xlabel("Actual price")
+            axs_list[ind].set_ylabel("Predicted price")
+            axs_list[ind].scatter(Y_test, Y_test, color='blue', label='Actual Selling Price')
+            axs_list[ind].scatter(Y_test, testPredictions[key], color='green',label='Predicted Selling Price')
+            ind = ind + 1
+        tab.pyplot(fig)
+    else:
+        #ind = 0
+        for key in testPredictions.keys():
+            plotline_prediction(tab, 50, Y_test.values, testPredictions[key])          
+            #axs_list[ind].set_title("by " + key)
+            #axs_list[ind].set_xlabel("Actual price")
+            #axs_list[ind].set_ylabel("Predicted price")
+            #axs_list[ind].line(Y_test, Y_test, color='blue', label='Actual Selling Price')
+            #axs_list[ind].line(Y_test, testPredictions[key], color='green',label='Predicted Selling Price')
+            #ind = ind + 1
+        #tab.pyplot(fig)
+            #data = [Y_test.values, testPredictions[key]]
+            #group_labels = ['Group 1', 'Group 2']
+            #tab.plotly_chart(px.line(data), use_container_width=True)
+            
+            #lineGraph_prediction(50, Y_test.values, testPredictions[key])  
+            #axs_list[ind].set_title("by " + key)
+            #axs_list[ind].set_xlabel("Actual price")
+            #axs_list[ind].set_ylabel("Predicted price")
+            #data = pd.DataFrame(Y_test.values, testPredictions[key], columns=["a", "b"])
+            #tab.line_chart(Y_test.values)
+            #tab.line_chart(testPredictions[key])
+            #tab.line_chart(Y_test, Y_test, color='blue', label='Actual Selling Price')
+            #tab.line_chart(Y_test, testPredictions[key], color='green',label='Predicted Selling Price')
+            #ind = ind + 1
 
 def printDataBrands(tab, subbrand, year, selected_list, selected_plot):
     tab.subheader('Brands data:')
@@ -298,8 +387,42 @@ def selectCurrency(tab, predictionResult, predictionResultEuro):
                 predictionsMessage = predictionsMessage + f'{key}:  {predictionResultEuro[key]}\n' + '\r\n'    
         tab.success(predictionsMessage)
 
+def frStrKey(strKey):
+    tNmb = 25
+    return strKey + (' ' * (tNmb - len(strKey))) + ':'
+
+def vizualizePredictionResults(tab, predictionResult):
+    modelsPredictMetrics = st.session_state['modelsPredictMetrics']
+
+    prediction_metrics_df = pd.DataFrame(modelsPredictMetrics, columns=(['Model', 'r2 Score', 'MSE']))
+    sorted_metrics_df = prediction_metrics_df.sort_values(by='r2 Score', ascending=False)
+    print('sorted_metrics_df')
+    print(sorted_metrics_df)
+    print('Model ', sorted_metrics_df.head(1)['Model'])
+    best_model_val = sorted_metrics_df.head(1)['Model'].values[0]
+    print('best_model_val  ', best_model_val)
+
+    if predictionResult:   
+        helpMessage = ''
+        for key in predictionResult.keys():
+            formatted1 = "₹  {0:.2f}".format(predictionResult[key][0])
+            formatted2 = "€  {0:.2f}".format(predictionResult[key][1])
+            helpMessage = helpMessage + frStrKey(key) + f'{formatted1}   ( {formatted2} )\n'  + '\r\n'           
+        tab.toggle("Show all prediction variants", help=helpMessage, disabled=True)
+        tab.success(f'Result of prediction:')
+        predictionsMessage = ''
+       
+        for key in predictionResult.keys():
+            if best_model_val == key:
+                formatted2 = "€  {0:.2f}".format(predictionResult[key][1])
+                formatted1 = "₹  {0:.2f}".format(predictionResult[key][0])
+                predictionsMessage = predictionsMessage + frStrKey(key) + f'{formatted1}   ( {formatted2} )\n'  + '\r\n'
+       
+        tab.success(predictionsMessage)
+
+
 def main():
-    st.sidebar.title("Car Price Prediction")
+    st.sidebar.image("CarPricePrediction.jpg")
     
     brand_v = st.sidebar.selectbox('Brand / Manufacturer', sorted(mappings[0].keys()))
 
@@ -326,19 +449,20 @@ def main():
     selectCurrency(None, None, None)
     # selection parameters 
     container = st.container(border=True)
-    #col1, col2, col3 = container.columns(3)
-
-    year_list = sorted(cars_df_labels.year.unique().tolist())
-    year_list.insert(0, 0) 
-    year_param = container.selectbox("Generate data for year:", year_list, key='year_param')
+    col1, col2 = container.columns(2)
+    with col1:
+        year_list = sorted(cars_df_labels.year.unique().tolist())
+        year_list.insert(0, 0) 
+        year_param = col1.selectbox("Generate data for year:", year_list, key='year_param')
         
     labels = ["Dataset", "Models", "Brands data"]
     if year_param != 0:
         labels.append(str(year_param) + '  sp')
         labels.append(str(year_param) + '  af')
-        #labels.append(str(year_param) + '  test')
 
     #
+    initModels()
+
     tabslist = st.tabs(labels)
   
     for label, tab in zip(labels, tabslist):
@@ -352,7 +476,7 @@ def main():
             dataset_tab = tab           
             printDataForPrediction(tab, brand_v, model_v, model_var_v, year_param)
         elif label == "Models":  
-            modelsTab = tab
+            refreshModels(tab)
         elif label == "Brands data": 
             container = tab.container(border=True)
             col1, col2, col3 = container.columns(3)
@@ -376,21 +500,22 @@ def main():
         else:
             plotForTab(tab, 'Charts for '+label, label, ["selling_price"])
     #
-    
-    #prediction_model_v = st.sidebar.selectbox("Select prediction model", models.values())
-
    # currency = st.sidebar.radio("Select currency (Exchange rate 1 INR = 0.01110 EUR)", ["₹ INR", "€ EUR"])
 
     if st.sidebar.button("Predict car price"):
-        predictionResult, testPredictions = predict_carprice(mappings[0].get(brand_v), mappings[1].get(model_v), mappings[2].get(model_var_v), year_v, 
+        predictionResult = predict_carprice(mappings[0].get(brand_v), mappings[1].get(model_v), mappings[2].get(model_var_v), year_v, 
                                   mappings[7].get(kmdriven_v), mappings[8].get(engine_v), mappings[9].get(mileage_v), mappings[10].get(max_power_v),
                                   mappings[5].get(fuel_v), mappings[3].get(seller_v), mappings[4].get(transmission_v), mappings[6].get(owner_v), seats_v)
         
         predictionResultEuro = dict()
         for key in predictionResult.keys():
             predictionResultEuro[key] = predictionResult[key] * 0.01110
+            values_list = list()
+            values_list.append(predictionResult[key])
+            values_list.append(predictionResult[key] * 0.01110)
+            predictionResult[key] = values_list 
         #
-        selectCurrency(dataset_tab, predictionResult, predictionResultEuro)
-        refreshModels(modelsTab, testPredictions)
+        #selectCurrency(dataset_tab, predictionResult, predictionResultEuro)
+        vizualizePredictionResults(dataset_tab, predictionResult)
 if __name__=='__main__':
     main()
