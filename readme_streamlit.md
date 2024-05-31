@@ -17,18 +17,9 @@ Our mission is to prepare a web app to make it available in production.
 
 sorry, i have to go with my child to hospital 
 
-ValueError: Multi-dimensional indexing (e.g. `obj[:, None]`) is no longer supported. Convert to a numpy array before indexing instead.
-Traceback:
-File "/Users/nikoma/Documents/Greenbootcamps/DS_final_project/.venv/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 600, in _run_script
-    exec(code, module.__dict__)
-File "/Users/nikoma/Documents/Greenbootcamps/DS_final_project/car_price_streamlet_app.py", line 447, in <module>
-    main()
-File "/Users/nikoma/Documents/Greenbootcamps/DS_final_project/car_price_streamlet_app.py", line 406, in main
-    refreshModels(tab)
-File "/Users/nikoma/Documents/Greenbootcamps/DS_final_project/car_price_streamlet_app.py", line 313, in refreshModels
-    lineGraph_prediction(50, Y_train, testPredictions[key])
-File "/Users/nikoma/Documents/Greenbootcamps/DS_final_project/car_price_streamlet_app.py", line 274, in lineGraph_prediction
-    plt.plot(aa, y[:number], marker='.', label="actual")
+
+ModuleNotFoundError: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs 
+(if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
 
 
 
